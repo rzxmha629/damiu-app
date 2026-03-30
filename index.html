@@ -4,6 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 body{font-family:Arial;background:#f0f2f5;padding:10px;}
@@ -14,56 +15,64 @@ input, select{width:100%;padding:10px;margin-top:5px;}
 .section{margin-top:10px;border:1px solid #ddd;border-radius:8px;}
 .section h4{margin:0;padding:10px;background:#eee;cursor:pointer;}
 .section .content{display:none;padding:10px;}
+.good{color:green;font-weight:bold;}
+.bad{color:red;font-weight:bold;}
 </style>
 </head>
 
 <body>
 
-<h2>INSPEKSI DAMIU</h2>
+<h2>SISTEM INSPEKSI DAMIU</h2>
 
+<!-- LOGIN -->
 <div class="card" id="loginBox">
 <input id="user" placeholder="username">
 <input id="pass" type="password" placeholder="password">
 <button onclick="login()">Login</button>
 </div>
 
+<!-- MENU -->
+<div class="card hidden" id="menu">
+<div id="menuContent"></div>
+</div>
+
+<!-- FORM -->
 <div class="card hidden" id="form">
 
 <input id="nama_dam" placeholder="Nama DAM">
 
-<!-- SECTION A -->
 <div class="section">
 <h4 onclick="toggle(this)">A. LOKASI</h4>
 <div class="content">
-
-<label>Bebas banjir</label>
-<select id="A1"><option value="0">Ya</option><option value="3">Tidak</option></select>
-
-<label>Pencemaran</label>
-<select id="A2"><option value="0">Tidak</option><option value="1">Ada</option></select>
-
-<label>Vektor</label>
-<select id="A3"><option value="0">Tidak</option><option value="3">Ada</option></select>
-
+<select id="A1"><option value="0">Banjir Tidak</option><option value="3">Banjir Ya</option></select>
+<select id="A2"><option value="0">Tidak Tercemar</option><option value="1">Tercemar</option></select>
+<select id="A3"><option value="0">Tidak Ada Vektor</option><option value="3">Ada Vektor</option></select>
 </div>
 </div>
 
-<!-- SECTION B -->
 <div class="section">
 <h4 onclick="toggle(this)">B. BANGUNAN</h4>
 <div class="content">
-
-<label>Bahan kuat</label>
-<select id="B1a"><option value="0">Ya</option><option value="1">Tidak</option></select>
-
-<label>Mudah dibersihkan</label>
-<select id="B1b"><option value="0">Ya</option><option value="1">Tidak</option></select>
-
+<select id="B1a"><option value="0">Baik</option><option value="1">Tidak</option></select>
+<select id="B1b"><option value="0">Baik</option><option value="1">Tidak</option></select>
 </div>
 </div>
 
 <button onclick="kirim()">SIMPAN</button>
 
+</div>
+
+<!-- DASHBOARD -->
+<div class="card hidden" id="dashboard">
+<h3>Dashboard</h3>
+<canvas id="chart"></canvas>
+<div id="ranking"></div>
+</div>
+
+<!-- PEMILIK -->
+<div class="card hidden" id="pemilik">
+<h3>Status Depot</h3>
+<div id="statusDepot"></div>
 </div>
 
 <script>
@@ -73,17 +82,8 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let currentUser = "";
-
-// AUTO QR DETECT
-window.onload = function(){
-  const params = new URLSearchParams(window.location.search);
-  const depot = params.get("depot");
-
-  if(depot){
-    document.getElementById("nama_dam").value = depot;
-  }
-}
+let currentUser="";
+let currentRole="";
 
 // LOGIN
 async function login(){
@@ -95,52 +95,145 @@ async function login(){
 
   if(data.length){
     currentUser = data[0].username;
+    currentRole = data[0].role;
+
     loginBox.classList.add("hidden");
-    form.classList.remove("hidden");
+    menu.classList.remove("hidden");
+
+    loadMenu();
+
+    // 🔥 ROLE FIX
+    if(currentRole==="admin"){
+      showPage("dashboard");
+    }
+    if(currentRole==="petugas"){
+      showPage("form");
+    }
+    if(currentRole==="pemilik"){
+      showPage("pemilik");
+    }
+
   }else{
     alert("Login gagal");
   }
 }
 
+// MENU
+function loadMenu(){
+  let html="";
+
+  if(currentRole==="admin"){
+    html += `<button onclick="showPage('dashboard')">Dashboard</button>`;
+    html += `<button onclick="exportPDF()">Export PDF</button>`;
+  }
+
+  if(currentRole==="petugas"){
+    html += `<button onclick="showPage('form')">Form Inspeksi</button>`;
+  }
+
+  if(currentRole==="pemilik"){
+    html += `<button onclick="showPage('pemilik')">Status</button>`;
+  }
+
+  menuContent.innerHTML = html;
+}
+
+// NAV
+function showPage(p){
+  form.classList.add("hidden");
+  dashboard.classList.add("hidden");
+  pemilik.classList.add("hidden");
+
+  if(p==="form") form.classList.remove("hidden");
+  if(p==="dashboard"){dashboard.classList.remove("hidden");loadDashboard();}
+  if(p==="pemilik"){pemilik.classList.remove("hidden");loadPemilik();}
+}
+
 // TOGGLE UI
 function toggle(el){
-  let content = el.nextElementSibling;
-  content.style.display =
-    content.style.display === "block" ? "none" : "block";
+  let c = el.nextElementSibling;
+  c.style.display = c.style.display==="block"?"none":"block";
 }
 
 // HITUNG
 function hitung(){
-  let total =
-    parseInt(A1.value) +
-    parseInt(A2.value) +
-    parseInt(A3.value);
-
+  let total = +A1.value + +A2.value + +A3.value;
   let nilai = 100 - ((total/165)*100);
-  let status = nilai >= 70 ? "LAIK" : "TIDAK LAIK";
-
-  return {total, nilai: Math.round(nilai), status};
+  let status = nilai>=70?"LAIK":"TIDAK LAIK";
+  return {total,nilai:Math.round(nilai),status};
 }
 
 // SIMPAN
 async function kirim(){
 
+  if(currentRole!=="petugas"){
+    alert("Hanya petugas yang bisa input!");
+    return;
+  }
+
   let h = hitung();
 
   await client.from('inspeksi').insert([{
-    nama_dam: nama_dam.value,
-    A1: parseInt(A1.value),
-    A2: parseInt(A2.value),
-    A3: parseInt(A3.value),
-    B1a: parseInt(B1a.value),
-    B1b: parseInt(B1b.value),
-    total: h.total,
-    nilai: h.nilai,
-    status: h.status,
-    petugas: currentUser
+    nama_dam:nama_dam.value,
+    A1:+A1.value,A2:+A2.value,A3:+A3.value,
+    B1a:+B1a.value,B1b:+B1b.value,
+    total:h.total,nilai:h.nilai,status:h.status,
+    petugas:currentUser
   }]);
 
-  alert("Nilai: "+h.nilai+" | "+h.status);
+  alert("Nilai: "+h.nilai+" ("+h.status+")");
+}
+
+// DASHBOARD + RANKING
+async function loadDashboard(){
+
+  const { data } = await client.from('inspeksi').select('*');
+
+  data.sort((a,b)=>b.nilai-a.nilai);
+
+  let html="<h4>Ranking Depot</h4>";
+
+  data.forEach((d,i)=>{
+    let warna = d.nilai>=70?"good":"bad";
+    html += `<p class="${warna}">${i+1}. ${d.nama_dam} - ${d.nilai}</p>`;
+  });
+
+  ranking.innerHTML = html;
+
+  new Chart(chart,{
+    type:"bar",
+    data:{
+      labels:data.map(d=>d.nama_dam),
+      datasets:[{data:data.map(d=>d.nilai)}]
+    }
+  });
+}
+
+// PEMILIK
+async function loadPemilik(){
+
+  const { data } = await client
+    .from('inspeksi')
+    .select('*')
+    .eq('nama_dam', currentUser);
+
+  if(!data.length){
+    statusDepot.innerHTML="Belum ada data";
+    return;
+  }
+
+  let d = data[data.length-1];
+  let warna = d.nilai>=70?"good":"bad";
+
+  statusDepot.innerHTML=`
+  <p>${d.nama_dam}</p>
+  <p class="${warna}">Nilai: ${d.nilai}</p>
+  <p>${d.status}</p>`;
+}
+
+// PDF EXPORT
+function exportPDF(){
+  window.print();
 }
 
 </script>
