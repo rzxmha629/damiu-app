@@ -31,11 +31,7 @@ input, select{width:100%;padding:10px;margin-top:5px;}
 
 <!-- MENU -->
 <div class="card hidden" id="menu">
-<div class="nav">
-<button onclick="showPage('form')">Form</button>
-<button onclick="showPage('dashboard')">Dashboard</button>
-<button onclick="exportExcel()">Export</button>
-</div>
+<div class="nav" id="menuContent"></div>
 </div>
 
 <!-- FORM -->
@@ -54,22 +50,30 @@ input, select{width:100%;padding:10px;margin-top:5px;}
 <select id="A3"><option value="0">Tidak</option><option value="3">Ada</option></select>
 
 <button onclick="kirim()">Kirim Data</button>
-
 </div>
 
-<!-- DASHBOARD -->
+<!-- DASHBOARD ADMIN -->
 <div class="card hidden" id="dashboard">
-<h3>Dashboard Nilai</h3>
+<h3>Dashboard Admin</h3>
 <canvas id="chart"></canvas>
+</div>
+
+<!-- DASHBOARD PEMILIK -->
+<div class="card hidden" id="dashboard_pemilik">
+<h3>Status Depot</h3>
+<div id="statusDepot"></div>
 </div>
 
 <script>
 
-// 🔥 GANTI
+// 🔥 GANTI INI
 const SUPABASE_URL = "https://rvtpnqhyjmcxdqtotzyf.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2dHBucWh5am1jeGRxdG90enlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4NTY1NzIsImV4cCI6MjA5MDQzMjU3Mn0.44ClXNFfy4QYFlpTAKK63sDKRC3QPYFf7mKO25aPqXE";
 
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = "";
+let currentRole = "";
 
 // ================= LOGIN =================
 async function login(){
@@ -83,35 +87,68 @@ async function login(){
     .eq('password', password);
 
   if(data.length){
+    currentUser = data[0].username;
+    currentRole = data[0].role;
+
     loginBox.classList.add("hidden");
     menu.classList.remove("hidden");
-    form.classList.remove("hidden");
+
+    loadMenu();
+
+    if(currentRole === "admin") showPage("dashboard");
+    if(currentRole === "petugas") showPage("form");
+    if(currentRole === "pemilik") showPage("dashboard_pemilik");
+
   }else{
     alert("Login gagal");
   }
 }
 
+// ================= MENU =================
+function loadMenu(){
+
+  let html = "";
+
+  if(currentRole === "admin"){
+    html += `<button onclick="showPage('dashboard')">Dashboard</button>`;
+    html += `<button onclick="exportExcel()">Export</button>`;
+  }
+
+  if(currentRole === "petugas"){
+    html += `<button onclick="showPage('form')">Form</button>`;
+  }
+
+  if(currentRole === "pemilik"){
+    html += `<button onclick="showPage('dashboard_pemilik')">Status</button>`;
+  }
+
+  document.getElementById("menuContent").innerHTML = html;
+}
+
 // ================= NAV =================
 function showPage(page){
+
   form.classList.add("hidden");
   dashboard.classList.add("hidden");
+  dashboard_pemilik.classList.add("hidden");
 
   if(page === "form") form.classList.remove("hidden");
+
   if(page === "dashboard"){
     dashboard.classList.remove("hidden");
     loadDashboard();
+  }
+
+  if(page === "dashboard_pemilik"){
+    dashboard_pemilik.classList.remove("hidden");
+    loadDashboardPemilik();
   }
 }
 
 // ================= HITUNG =================
 function hitungNilai(){
-  let total =
-    parseInt(A1.value) +
-    parseInt(A2.value) +
-    parseInt(A3.value);
-
+  let total = parseInt(A1.value)+parseInt(A2.value)+parseInt(A3.value);
   let nilai = 100 - ((total/165)*100);
-
   let status = nilai >= 70 ? "LAIK" : "TIDAK LAIK";
 
   return {total, nilai: Math.round(nilai), status};
@@ -132,17 +169,17 @@ async function kirim(){
       total: hasil.total,
       nilai: hasil.nilai,
       status: hasil.status,
-      petugas: user.value
+      petugas: currentUser
     }]);
 
   if(error){
     alert(error.message);
   }else{
-    alert("Tersimpan | Nilai: " + hasil.nilai + " (" + hasil.status + ")");
+    alert("Tersimpan | Nilai: " + hasil.nilai);
   }
 }
 
-// ================= DASHBOARD =================
+// ================= DASHBOARD ADMIN =================
 async function loadDashboard(){
 
   const { data } = await client
@@ -161,8 +198,31 @@ async function loadDashboard(){
   });
 }
 
+// ================= DASHBOARD PEMILIK =================
+async function loadDashboardPemilik(){
+
+  const { data } = await client
+    .from('inspeksi')
+    .select('*')
+    .eq('nama_dam', currentUser);
+
+  if(data.length === 0){
+    statusDepot.innerHTML = "Belum ada data";
+    return;
+  }
+
+  let d = data[data.length-1];
+
+  statusDepot.innerHTML = `
+    <p>Nama: ${d.nama_dam}</p>
+    <p>Nilai: ${d.nilai}</p>
+    <p>Status: ${d.status}</p>
+  `;
+}
+
 // ================= EXPORT =================
 async function exportExcel(){
+
   const { data } = await client
     .from('inspeksi')
     .select('*');
