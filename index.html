@@ -4,242 +4,143 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body{font-family:Arial;background:#f5f5f5;padding:15px;}
+body{font-family:Arial;background:#f0f2f5;padding:10px;}
 .card{background:#fff;padding:15px;margin:10px 0;border-radius:10px;}
 button{padding:12px;width:100%;margin-top:10px;}
 input, select{width:100%;padding:10px;margin-top:5px;}
 .hidden{display:none;}
-.nav{display:flex;gap:5px;}
-.nav button{flex:1;}
+.section{margin-top:10px;border:1px solid #ddd;border-radius:8px;}
+.section h4{margin:0;padding:10px;background:#eee;cursor:pointer;}
+.section .content{display:none;padding:10px;}
 </style>
 </head>
 
 <body>
 
-<h2>DAMIU SYSTEM</h2>
+<h2>INSPEKSI DAMIU</h2>
 
-<!-- LOGIN -->
 <div class="card" id="loginBox">
-<h3>Login</h3>
 <input id="user" placeholder="username">
 <input id="pass" type="password" placeholder="password">
-<button onclick="login()">LOGIN</button>
+<button onclick="login()">Login</button>
 </div>
 
-<!-- MENU -->
-<div class="card hidden" id="menu">
-<div class="nav" id="menuContent"></div>
-</div>
-
-<!-- FORM -->
 <div class="card hidden" id="form">
-<h3>Form Inspeksi</h3>
 
 <input id="nama_dam" placeholder="Nama DAM">
 
-<label>A1 Banjir</label>
-<select id="A1"><option value="0">Sesuai</option><option value="3">Tidak</option></select>
+<!-- SECTION A -->
+<div class="section">
+<h4 onclick="toggle(this)">A. LOKASI</h4>
+<div class="content">
 
-<label>A2 Pencemaran</label>
-<select id="A2"><option value="0">Sesuai</option><option value="1">Tidak</option></select>
+<label>Bebas banjir</label>
+<select id="A1"><option value="0">Ya</option><option value="3">Tidak</option></select>
 
-<label>A3 Vektor</label>
+<label>Pencemaran</label>
+<select id="A2"><option value="0">Tidak</option><option value="1">Ada</option></select>
+
+<label>Vektor</label>
 <select id="A3"><option value="0">Tidak</option><option value="3">Ada</option></select>
 
-<button onclick="kirim()">Kirim Data</button>
+</div>
 </div>
 
-<!-- DASHBOARD ADMIN -->
-<div class="card hidden" id="dashboard">
-<h3>Dashboard Admin</h3>
-<canvas id="chart"></canvas>
+<!-- SECTION B -->
+<div class="section">
+<h4 onclick="toggle(this)">B. BANGUNAN</h4>
+<div class="content">
+
+<label>Bahan kuat</label>
+<select id="B1a"><option value="0">Ya</option><option value="1">Tidak</option></select>
+
+<label>Mudah dibersihkan</label>
+<select id="B1b"><option value="0">Ya</option><option value="1">Tidak</option></select>
+
+</div>
 </div>
 
-<!-- DASHBOARD PEMILIK -->
-<div class="card hidden" id="dashboard_pemilik">
-<h3>Status Depot</h3>
-<div id="statusDepot"></div>
+<button onclick="kirim()">SIMPAN</button>
+
 </div>
 
 <script>
 
-// 🔥 GANTI INI
 const SUPABASE_URL = "https://rvtpnqhyjmcxdqtotzyf.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2dHBucWh5am1jeGRxdG90enlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4NTY1NzIsImV4cCI6MjA5MDQzMjU3Mn0.44ClXNFfy4QYFlpTAKK63sDKRC3QPYFf7mKO25aPqXE";
 
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentUser = "";
-let currentRole = "";
 
-// ================= LOGIN =================
+// AUTO QR DETECT
+window.onload = function(){
+  const params = new URLSearchParams(window.location.search);
+  const depot = params.get("depot");
+
+  if(depot){
+    document.getElementById("nama_dam").value = depot;
+  }
+}
+
+// LOGIN
 async function login(){
-  const username = user.value.trim();
-  const password = pass.value.trim();
-
   const { data } = await client
     .from('users')
     .select('*')
-    .eq('username', username)
-    .eq('password', password);
+    .eq('username', user.value)
+    .eq('password', pass.value);
 
   if(data.length){
     currentUser = data[0].username;
-    currentRole = data[0].role;
-
     loginBox.classList.add("hidden");
-    menu.classList.remove("hidden");
-
-    loadMenu();
-
-    if(currentRole === "admin") showPage("dashboard");
-    if(currentRole === "petugas") showPage("form");
-    if(currentRole === "pemilik") showPage("dashboard_pemilik");
-
+    form.classList.remove("hidden");
   }else{
     alert("Login gagal");
   }
 }
 
-// ================= MENU =================
-function loadMenu(){
-
-  let html = "";
-
-  if(currentRole === "admin"){
-    html += `<button onclick="showPage('dashboard')">Dashboard</button>`;
-    html += `<button onclick="exportExcel()">Export</button>`;
-  }
-
-  if(currentRole === "petugas"){
-    html += `<button onclick="showPage('form')">Form</button>`;
-  }
-
-  if(currentRole === "pemilik"){
-    html += `<button onclick="showPage('dashboard_pemilik')">Status</button>`;
-  }
-
-  document.getElementById("menuContent").innerHTML = html;
+// TOGGLE UI
+function toggle(el){
+  let content = el.nextElementSibling;
+  content.style.display =
+    content.style.display === "block" ? "none" : "block";
 }
 
-// ================= NAV =================
-function showPage(page){
+// HITUNG
+function hitung(){
+  let total =
+    parseInt(A1.value) +
+    parseInt(A2.value) +
+    parseInt(A3.value);
 
-  form.classList.add("hidden");
-  dashboard.classList.add("hidden");
-  dashboard_pemilik.classList.add("hidden");
-
-  if(page === "form") form.classList.remove("hidden");
-
-  if(page === "dashboard"){
-    dashboard.classList.remove("hidden");
-    loadDashboard();
-  }
-
-  if(page === "dashboard_pemilik"){
-    dashboard_pemilik.classList.remove("hidden");
-    loadDashboardPemilik();
-  }
-}
-
-// ================= HITUNG =================
-function hitungNilai(){
-  let total = parseInt(A1.value)+parseInt(A2.value)+parseInt(A3.value);
   let nilai = 100 - ((total/165)*100);
   let status = nilai >= 70 ? "LAIK" : "TIDAK LAIK";
 
   return {total, nilai: Math.round(nilai), status};
 }
 
-// ================= SIMPAN =================
+// SIMPAN
 async function kirim(){
 
-  const hasil = hitungNilai();
+  let h = hitung();
 
-  const { error } = await client
-    .from('inspeksi')
-    .insert([{
-      nama_dam: nama_dam.value,
-      A1: parseInt(A1.value),
-      A2: parseInt(A2.value),
-      A3: parseInt(A3.value),
-      total: hasil.total,
-      nilai: hasil.nilai,
-      status: hasil.status,
-      petugas: currentUser
-    }]);
+  await client.from('inspeksi').insert([{
+    nama_dam: nama_dam.value,
+    A1: parseInt(A1.value),
+    A2: parseInt(A2.value),
+    A3: parseInt(A3.value),
+    B1a: parseInt(B1a.value),
+    B1b: parseInt(B1b.value),
+    total: h.total,
+    nilai: h.nilai,
+    status: h.status,
+    petugas: currentUser
+  }]);
 
-  if(error){
-    alert(error.message);
-  }else{
-    alert("Tersimpan | Nilai: " + hasil.nilai);
-  }
-}
-
-// ================= DASHBOARD ADMIN =================
-async function loadDashboard(){
-
-  const { data } = await client
-    .from('inspeksi')
-    .select('*');
-
-  const labels = data.map(d=>d.nama_dam);
-  const nilai = data.map(d=>d.nilai);
-
-  new Chart(document.getElementById("chart"),{
-    type:"bar",
-    data:{
-      labels: labels,
-      datasets:[{label:"Nilai", data:nilai}]
-    }
-  });
-}
-
-// ================= DASHBOARD PEMILIK =================
-async function loadDashboardPemilik(){
-
-  const { data } = await client
-    .from('inspeksi')
-    .select('*')
-    .eq('nama_dam', currentUser);
-
-  if(data.length === 0){
-    statusDepot.innerHTML = "Belum ada data";
-    return;
-  }
-
-  let d = data[data.length-1];
-
-  statusDepot.innerHTML = `
-    <p>Nama: ${d.nama_dam}</p>
-    <p>Nilai: ${d.nilai}</p>
-    <p>Status: ${d.status}</p>
-  `;
-}
-
-// ================= EXPORT =================
-async function exportExcel(){
-
-  const { data } = await client
-    .from('inspeksi')
-    .select('*');
-
-  let csv = "Nama,Nilai,Status\n";
-
-  data.forEach(d=>{
-    csv += `${d.nama_dam},${d.nilai},${d.status}\n`;
-  });
-
-  const blob = new Blob([csv], {type:"text/csv"});
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "data_inspeksi.csv";
-  a.click();
+  alert("Nilai: "+h.nilai+" | "+h.status);
 }
 
 </script>
