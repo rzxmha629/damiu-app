@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
+<style>
+body{font-family:Arial;padding:20px;background:#f5f5f5;}
+.card{background:#fff;padding:15px;margin:10px 0;border-radius:10px;}
+button{padding:10px;width:100%;}
+</style>
+</head>
+
+<body>
+
+<h2>DAMIU SYSTEM</h2>
+
+<div class="card">
+<h3>Login</h3>
+<input id="user" placeholder="username"><br><br>
+<input id="pass" type="password" placeholder="password"><br><br>
+<button onclick="login()">Login</button>
+</div>
+
+<div class="card" id="app" style="display:none;">
+<h3>Form Inspeksi</h3>
+
+<input id="nama_dam" placeholder="Nama DAM"><br><br>
+
+<label>A1 Banjir</label>
+<select id="A1">
+<option value="0">Sesuai</option>
+<option value="3">Tidak</option>
+</select><br><br>
+
+<label>A2 Pencemaran</label>
+<select id="A2">
+<option value="0">Sesuai</option>
+<option value="1">Tidak</option>
+</select><br><br>
+
+<label>A3 Vektor</label>
+<select id="A3">
+<option value="0">Tidak</option>
+<option value="3">Ada</option>
+</select><br><br>
+
+<button onclick="kirim()">Kirim</button>
+</div>
+
+<script>
+const supabase = supabase.createClient(
+  "https://rvtpnqhyjmcxdqtotzyf.supabase.co/",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2dHBucWh5am1jeGRxdG90enlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4NTY1NzIsImV4cCI6MjA5MDQzMjU3Mn0.44ClXNFfy4QYFlpTAKK63sDKRC3QPYFf7mKO25aPqXE"
+);
+
+async function login(){
+  let { data } = await supabase
+    .from('users')
+    .select('*')
+    .eq('username', user.value)
+    .eq('password', pass.value)
+    .single();
+
+  if(data){
+    alert("Login berhasil");
+    document.getElementById("app").style.display="block";
+  }else{
+    alert("Login gagal");
+  }
+}
+
+async function kirim(){
+  await supabase.from('inspeksi').insert([{
+    nama_dam: nama_dam.value,
+    A1: parseInt(A1.value),
+    A2: parseInt(A2.value),
+    A3: parseInt(A3.value),
+    petugas: user.value
+  }]);
+
+  alert("Data tersimpan");
+}
+</script>
+
+</body>
+</html>
