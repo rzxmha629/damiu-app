@@ -84,6 +84,14 @@ const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentUser="";
 let currentRole="";
+let chartInstance=null;
+
+// AUTO QR
+window.onload = function(){
+  const params = new URLSearchParams(window.location.search);
+  const depot = params.get("depot");
+  if(depot) nama_dam.value = depot;
+}
 
 // LOGIN
 async function login(){
@@ -102,16 +110,9 @@ async function login(){
 
     loadMenu();
 
-    // 🔥 ROLE FIX
-    if(currentRole==="admin"){
-      showPage("dashboard");
-    }
-    if(currentRole==="petugas"){
-      showPage("form");
-    }
-    if(currentRole==="pemilik"){
-      showPage("pemilik");
-    }
+    if(currentRole==="admin") showPage("dashboard");
+    if(currentRole==="petugas") showPage("form");
+    if(currentRole==="pemilik") showPage("pemilik");
 
   }else{
     alert("Login gagal");
@@ -149,7 +150,7 @@ function showPage(p){
   if(p==="pemilik"){pemilik.classList.remove("hidden");loadPemilik();}
 }
 
-// TOGGLE UI
+// TOGGLE
 function toggle(el){
   let c = el.nextElementSibling;
   c.style.display = c.style.display==="block"?"none":"block";
@@ -157,9 +158,13 @@ function toggle(el){
 
 // HITUNG
 function hitung(){
-  let total = +A1.value + +A2.value + +A3.value;
+  let total =
+    +A1.value + +A2.value + +A3.value +
+    +B1a.value + +B1b.value;
+
   let nilai = 100 - ((total/165)*100);
   let status = nilai>=70?"LAIK":"TIDAK LAIK";
+
   return {total,nilai:Math.round(nilai),status};
 }
 
@@ -167,44 +172,67 @@ function hitung(){
 async function kirim(){
 
   if(currentRole!=="petugas"){
-    alert("Hanya petugas yang bisa input!");
+    alert("Hanya petugas!");
+    return;
+  }
+
+  if(!nama_dam.value){
+    alert("Nama depot wajib diisi!");
     return;
   }
 
   let h = hitung();
 
-  await client.from('inspeksi').insert([{
+  const { error } = await client.from('inspeksi').insert([{
     nama_dam:nama_dam.value,
     A1:+A1.value,A2:+A2.value,A3:+A3.value,
     B1a:+B1a.value,B1b:+B1b.value,
     total:h.total,nilai:h.nilai,status:h.status,
-    petugas:currentUser
+    petugas:currentUser,
+    created_at:new Date()
   }]);
 
-  alert("Nilai: "+h.nilai+" ("+h.status+")");
+  if(error){
+    alert(error.message);
+  }else{
+    alert("Nilai: "+h.nilai+" ("+h.status+")");
+
+    document.querySelectorAll("select").forEach(s=>s.value=0);
+  }
 }
 
-// DASHBOARD + RANKING
+// DASHBOARD
 async function loadDashboard(){
 
   const { data } = await client.from('inspeksi').select('*');
 
-  data.sort((a,b)=>b.nilai-a.nilai);
+  let latest={};
+
+  data.forEach(d=>{
+    if(!latest[d.nama_dam] || new Date(d.created_at)>new Date(latest[d.nama_dam].created_at)){
+      latest[d.nama_dam]=d;
+    }
+  });
+
+  let finalData = Object.values(latest);
+  finalData.sort((a,b)=>b.nilai-a.nilai);
 
   let html="<h4>Ranking Depot</h4>";
 
-  data.forEach((d,i)=>{
+  finalData.forEach((d,i)=>{
     let warna = d.nilai>=70?"good":"bad";
-    html += `<p class="${warna}">${i+1}. ${d.nama_dam} - ${d.nilai}</p>`;
+    html += `<p class="${warna}">${i+1}. ${d.nama_dam} - ${d.nilai} (${d.status})</p>`;
   });
 
   ranking.innerHTML = html;
 
-  new Chart(chart,{
+  if(chartInstance) chartInstance.destroy();
+
+  chartInstance = new Chart(chart,{
     type:"bar",
     data:{
-      labels:data.map(d=>d.nama_dam),
-      datasets:[{data:data.map(d=>d.nilai)}]
+      labels:finalData.map(d=>d.nama_dam),
+      datasets:[{label:"Nilai",data:finalData.map(d=>d.nilai)}]
     }
   });
 }
@@ -231,9 +259,23 @@ async function loadPemilik(){
   <p>${d.status}</p>`;
 }
 
-// PDF EXPORT
+// PDF
 function exportPDF(){
+
+  let original = document.body.innerHTML;
+
+  let isi = `
+  <h2>LAPORAN INSPEKSI DAMIU</h2>
+  <p>Tanggal: ${new Date().toLocaleString()}</p>
+  ${dashboard.innerHTML}
+  `;
+
+  document.body.innerHTML = isi;
+
   window.print();
+
+  document.body.innerHTML = original;
+  location.reload();
 }
 
 </script>
