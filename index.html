@@ -10,7 +10,7 @@
 body{font-family:Arial;background:#f0f2f5;padding:10px;}
 .card{background:#fff;padding:15px;margin:10px 0;border-radius:10px;}
 button{padding:12px;width:100%;margin-top:10px;}
-input, select{width:100%;padding:10px;margin-top:5px;}
+input{width:100%;padding:10px;margin-top:5px;}
 .hidden{display:none;}
 .section{margin-top:10px;border:1px solid #ddd;border-radius:8px;}
 .section h4{margin:0;padding:10px;background:#eee;cursor:pointer;}
@@ -39,26 +39,49 @@ input, select{width:100%;padding:10px;margin-top:5px;}
 <!-- FORM -->
 <div class="card hidden" id="form">
 
-<input id="nama_dam" placeholder="Nama DAM">
+<h3>FORMULIR INSPEKSI KESEHATAN LINGKUNGAN</h3>
+<h4>DEPOT AIR MINUM</h4>
+
+<label>Nama DAM</label>
+<input id="nama_dam">
+
+<label>Alamat</label>
+<input id="alamat">
+
+<label>Nama Pemilik</label>
+<input id="pemilik_nama">
+
+<label>Tanggal Inspeksi</label>
+<input type="date" id="tanggal">
+
+<hr>
 
 <div class="section">
 <h4 onclick="toggle(this)">A. LOKASI</h4>
 <div class="content">
-<select id="A1"><option value="0">Banjir Tidak</option><option value="3">Banjir Ya</option></select>
-<select id="A2"><option value="0">Tidak Tercemar</option><option value="1">Tercemar</option></select>
-<select id="A3"><option value="0">Tidak Ada Vektor</option><option value="3">Ada Vektor</option></select>
+<label><input type="checkbox" id="A1" value="3"> Tidak bebas banjir</label><br>
+<label><input type="checkbox" id="A2" value="1"> Tercemar</label><br>
+<label><input type="checkbox" id="A3" value="1"> Ada vektor</label>
 </div>
 </div>
 
 <div class="section">
 <h4 onclick="toggle(this)">B. BANGUNAN</h4>
 <div class="content">
-<select id="B1a"><option value="0">Baik</option><option value="1">Tidak</option></select>
-<select id="B1b"><option value="0">Baik</option><option value="1">Tidak</option></select>
+<label><input type="checkbox" id="B1a" value="1"> Bahan tidak kuat</label><br>
+<label><input type="checkbox" id="B1b" value="1"> Tidak mudah dibersihkan</label><br>
+<label><input type="checkbox" id="B1c" value="1"> Retak/sarang vektor</label>
 </div>
 </div>
 
-<button onclick="kirim()">SIMPAN</button>
+<div class="section">
+<h4 onclick="toggle(this)">Upload Foto Temuan</h4>
+<div class="content">
+<input type="file" id="foto">
+</div>
+</div>
+
+<button onclick="kirim()">SIMPAN INSPEKSI</button>
 
 </div>
 
@@ -67,6 +90,7 @@ input, select{width:100%;padding:10px;margin-top:5px;}
 <h3>Dashboard</h3>
 <canvas id="chart"></canvas>
 <div id="ranking"></div>
+<div id="riwayat"></div>
 </div>
 
 <!-- PEMILIK -->
@@ -86,7 +110,7 @@ let currentUser="";
 let currentRole="";
 let chartInstance=null;
 
-// AUTO QR
+// QR AUTO
 window.onload = function(){
   const params = new URLSearchParams(window.location.search);
   const depot = params.get("depot");
@@ -156,16 +180,48 @@ function toggle(el){
   c.style.display = c.style.display==="block"?"none":"block";
 }
 
+// CHECK VALUE
+function getNilai(id){
+  return document.getElementById(id).checked 
+    ? parseInt(document.getElementById(id).value) 
+    : 0;
+}
+
 // HITUNG
 function hitung(){
   let total =
-    +A1.value + +A2.value + +A3.value +
-    +B1a.value + +B1b.value;
+    getNilai("A1") +
+    getNilai("A2") +
+    getNilai("A3") +
+    getNilai("B1a") +
+    getNilai("B1b") +
+    getNilai("B1c");
 
   let nilai = 100 - ((total/165)*100);
   let status = nilai>=70?"LAIK":"TIDAK LAIK";
 
   return {total,nilai:Math.round(nilai),status};
+}
+
+// UPLOAD FOTO
+async function uploadFoto(file){
+
+  const fileName = Date.now()+"_"+file.name;
+
+  const { error } = await client.storage
+    .from('foto')
+    .upload(fileName, file);
+
+  if(error){
+    alert(error.message);
+    return null;
+  }
+
+  const { data } = client.storage
+    .from('foto')
+    .getPublicUrl(fileName);
+
+  return data.publicUrl;
 }
 
 // SIMPAN
@@ -176,29 +232,36 @@ async function kirim(){
     return;
   }
 
-  if(!nama_dam.value){
-    alert("Nama depot wajib diisi!");
-    return;
-  }
-
   let h = hitung();
 
-  const { error } = await client.from('inspeksi').insert([{
+  let fotoUrl=null;
+
+  if(foto.files[0]){
+    fotoUrl = await uploadFoto(foto.files[0]);
+  }
+
+  await client.from('inspeksi').insert([{
     nama_dam:nama_dam.value,
-    A1:+A1.value,A2:+A2.value,A3:+A3.value,
-    B1a:+B1a.value,B1b:+B1b.value,
-    total:h.total,nilai:h.nilai,status:h.status,
+    alamat:alamat.value,
+    pemilik:pemilik_nama.value,
+    tanggal:tanggal.value,
+    A1:getNilai("A1"),
+    A2:getNilai("A2"),
+    A3:getNilai("A3"),
+    B1a:getNilai("B1a"),
+    B1b:getNilai("B1b"),
+    B1c:getNilai("B1c"),
+    foto:fotoUrl,
+    total:h.total,
+    nilai:h.nilai,
+    status:h.status,
     petugas:currentUser,
     created_at:new Date()
   }]);
 
-  if(error){
-    alert(error.message);
-  }else{
-    alert("Nilai: "+h.nilai+" ("+h.status+")");
+  alert("Berhasil | Nilai: "+h.nilai);
 
-    document.querySelectorAll("select").forEach(s=>s.value=0);
-  }
+  document.querySelectorAll("input[type=checkbox]").forEach(c=>c.checked=false);
 }
 
 // DASHBOARD
@@ -221,7 +284,7 @@ async function loadDashboard(){
 
   finalData.forEach((d,i)=>{
     let warna = d.nilai>=70?"good":"bad";
-    html += `<p class="${warna}">${i+1}. ${d.nama_dam} - ${d.nilai} (${d.status})</p>`;
+    html += `<p class="${warna}">${i+1}. ${d.nama_dam} - ${d.nilai}</p>`;
   });
 
   ranking.innerHTML = html;
@@ -235,6 +298,31 @@ async function loadDashboard(){
       datasets:[{label:"Nilai",data:finalData.map(d=>d.nilai)}]
     }
   });
+
+  loadRiwayat();
+}
+
+// RIWAYAT
+async function loadRiwayat(){
+
+  const { data } = await client
+    .from('inspeksi')
+    .select('*')
+    .order('created_at',{ascending:false});
+
+  let html="<h4>Riwayat Inspeksi</h4>";
+
+  data.forEach(d=>{
+    html += `
+    <div class="card">
+      <b>${d.nama_dam}</b><br>
+      Nilai: ${d.nilai} (${d.status})<br>
+      Petugas: ${d.petugas}<br>
+      ${d.foto ? `<img src="${d.foto}" width="100">` : ""}
+    </div>`;
+  });
+
+  riwayat.innerHTML = html;
 }
 
 // PEMILIK
@@ -256,7 +344,8 @@ async function loadPemilik(){
   statusDepot.innerHTML=`
   <p>${d.nama_dam}</p>
   <p class="${warna}">Nilai: ${d.nilai}</p>
-  <p>${d.status}</p>`;
+  <p>${d.status}</p>
+  ${d.foto ? `<br><img src="${d.foto}" width="120">` : ""}`;
 }
 
 // PDF
@@ -266,7 +355,7 @@ function exportPDF(){
 
   let isi = `
   <h2>LAPORAN INSPEKSI DAMIU</h2>
-  <p>Tanggal: ${new Date().toLocaleString()}</p>
+  <p>${new Date().toLocaleString()}</p>
   ${dashboard.innerHTML}
   `;
 
